@@ -1,0 +1,10 @@
+*.cywrk.*
+*/codegentemp*
+*.cyprj.*
+*/ARM_GCC_*
+*/Export*
+*.cyfit
+*.cycdx
+*.rpt
+*.svd
+*_timing.html

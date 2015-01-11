@@ -1,0 +1,27 @@
+--------------------------------------------------------------------------------
+
+- In USBFS_episr.c:
+
+/* `#START CUSTOM_DECLARATIONS` Place your declaration here */
+extern volatile uint8 bUSBResetDetected;
+/* `#END` */
+
+/* `#START BUS_RESET_USER_CODE` Place your code here */
+bUSBResetDetected = 1;
+/* `#END` */
+
+--------------------------------------------------------------------------------
+
+- In USBFS_vnd.c:
+
+/* `#START VENDOR_SPECIFIC_DECLARATIONS` Place your declaration here */
+#include "kitprog.h"
+/* `#END` */
+
+/* `#START VENDOR_SPECIFIC_CODE` Place your vendor specific request here */
+// Service the vendor specific command
+VendorCmd();		
+requestHandled = USBFS_InitControlRead();
+/* `#END` */
+
+--------------------------------------------------------------------------------
