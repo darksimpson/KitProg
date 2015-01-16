@@ -90,7 +90,7 @@
 
 #define USBFS_MON_VBUS                       (0u)
 #define USBFS_EXTERN_VBUS                    (0u)
-#define USBFS_EXTERN_VND                     (0u)
+#define USBFS_EXTERN_VND                     (1u)
 #define USBFS_EXTERN_CLS                     (0u)
 #define USBFS_MAX_INTERFACES_NUMBER          (2u)
 #define USBFS_EP0_ISR_REMOVE                 (0u)

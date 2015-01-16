@@ -1,13 +1,42 @@
-#include "kitprog.h"
+#include "ProgComm.h"
 
-//uint8 SWDFlag = TRUE;
+#include "SWD.h"
+
+// Vendor control endpoint operations
+#define CLEAR_OP			0x00
+#define CLEAR_BUSY			0x00
+#define SET_BUSY			0x01
+#define USB_OK_ACK			0x01
+#define READ_CMD			0x01
+#define WRITE_CMD			0x02
+#define PROGRAM_CMD			0x07
+
+// SWD commands
+#define CMD_BUFFER			0x00
+#define CMD_STATUS 			0x01
+#define CMD_RESET			0x04
+#define CMD_SWD_SYNC    	0x41
+#define CMD_SWD_ACQUIRE 	0x42
+
+// Power status
+#define POWER_SUPPLIED_INVERSE	0x00
+#define ACK_POWER_DETECTED		0x40
+
+uint8 pendingOp = CLEAR_OP;
+uint8 fTcBusy = CLEAR_BUSY;
+
+uint8 pifData[2];
+uint8 pifBuf[64];
+uint8 progMode;
 
 uint8 bufOut[68]; 
 uint8 bufIn[384]; 
 int16 bufOutOffset;
 int16 bufInOffset;
 int16 bufOutLen;
-uint8 fIsShortPkt = FALSE;
+uint8 fIsShortPkt = false;
+
+extern volatile T_USBFS_TD USBFS_currentTD;
 
 // Reads the SWD request issued by the PSoC programmer and retrieves 
 // the data packets from USB lines for the programming operation
@@ -24,11 +53,11 @@ void ReceiveSWDRequest(uint8 *bufOut, int16 *bufOutOffset, int16 *bufOutLen)
 
     if (size < 64)
 	{
-        fIsShortPkt = TRUE;
+        fIsShortPkt = true;
 	}
     else
 	{
-        fIsShortPkt = FALSE;
+        fIsShortPkt = false;
 	}
 	return;
 }
@@ -147,77 +176,55 @@ void HandleSWDRequest(void)
 }
 
 // Checks the command received through the USB control endpoint and invokes apporpriate functions
-void SWDComm(void)
+void ProgComm(void)
 {
-	// Global variable pendingOp is set inside the function VendorCmd() defined in USBFS_commandInterface.c
+	// Global variable pendingOp is set inside the function USBFS_HandleVendorRqst()
 	if (pendingOp)
     {
         switch(pendingOp)
         {
 			// Command = 0x01, get status (connected, powered) of the KitProg
-			/*case CMD_STATUS:
-					// Power is detected by the programmer
+			case CMD_STATUS:
+					// Power is detected by the programmer. 0x00 for power not detected ack.
 					pifBuf[3] = ACK_POWER_DETECTED;
 					// Power is supplied by the programmer. Works on inverse logic. 0x00 for power supplied and 0x01 for not supplied.
 					pifBuf[4] = POWER_SUPPLIED_INVERSE;
-					break;*/
+					break;
 			
 			// Command = 0x04, reset the PSoC
             case CMD_RESET:
-					SWDResetPSoC();
-                    break;	
-			
-			// Command = 0x40, set the protocol		
-			/*case CMD_SET_PROTOCOL:
-					// pifData[0] is for Protocol
-                    if (pifData[0] == 0x01) // If Protocol is SWD (0x01) set the flag. Otherwise ignore the command.
-                    {
-                        SWDFlag = TRUE;
-					} 
-					else 
-					{
-                        SWDFlag = FALSE;
-					}
-					break;*/
+				SWDResetPSoC();
+                break;
 					
             // Command = 0x41, synchronise data transfer of the data endpoints with control endpoint
             case CMD_SWD_SYNC: 
-                    bufOutOffset = 0;
-                    bufInOffset = 0;
-                    bufOutLen = 0;
-                    break;
+                bufOutOffset = 0;
+                bufInOffset = 0;
+                bufOutLen = 0;
+                break;
 					
             // Command = 0x42, acquire PSoC
             case CMD_SWD_ACQUIRE: 
-					// (pifData[0] & 0x0F): Device type
-					// ((pifData[0] & 0xF0) >> 4): Acquire mode: Reset (0x00) or Power cycle (?) 
-					// pifData[1]: Number of retries to acquire PSoC
-					
-					if ((pifData[0] & 0x0F) == 0x00) // 0x0 for PSoC4, according to developers
-					{
-						if (SWDAcquirePSoC4(pifData[1]) == TRUE) 
-							pifBuf[0] = 0x01; // ACQUIRE_PASS
-						else
-							pifBuf[0] = 0x00; // ACQUIRE_FAIL
-					}
-					else // Unknown acquire method
-					{
+				// (pifData[0] & 0x0F): Device type
+				// ((pifData[0] & 0xF0) >> 4): Acquire mode: Reset (0x00) or Power cycle (?) 
+				// pifData[1]: Number of retries to acquire PSoC
+				
+				if ((pifData[0] & 0x0F) == 0x00) // 0x0 for PSoC4, according to developers
+				{
+					if (SWDAcquirePSoC4(pifData[1]) == true) 
+						pifBuf[0] = 0x01; // ACQUIRE_PASS
+					else
 						pifBuf[0] = 0x00; // ACQUIRE_FAIL
-					}
-                    break;
-					
-            // Command = 0x43, special command
-            /*case CMD_SWD_SPECIAL:
-					// pifData[0]: Action (?)
-                    if (pifData[0] == 0x00) // Action: Reset the SWD bus
-					{
-                        SWDResetBus();
-                    } 
-                    break;*/
+				}
+				else // Unknown acquire method
+				{
+					pifBuf[0] = 0x00; // ACQUIRE_FAIL
+				}
+                break;
 
             default:
-			// Ignore other commands for now
-					break;
+				// Ignore other commands for now
+				break;
         }		
 
         pendingOp = CLEAR_OP;
@@ -227,11 +234,74 @@ void SWDComm(void)
 	// If a packet is received in the OUT endpoint
     if (USBFS_bGetEPAckState(SWD_OUT_EP))
     {
-		// If protocol is SWD, then use FSM algorithm for 64-bytes packets on SWD-commands
-        //if (SWDFlag == TRUE) 
-        //{
-            // Handles the swd commands. Defined in swd.c
-			HandleSWDRequest();
-        //}
+		HandleSWDRequest();
     }
+}
+
+// Vendor USB control request handler (caller from USB INTERRUPT!)
+// !!! YOU MUST ENABLE CUSTOM VENDOR REQUEST HANDLING IN USBFS' ADVANCED PROPERTIES TAB !!!
+// Global Variables: 
+// pifBuf	: Bufer to send data to through the USB control endpoint
+// pifData	: Buffer to store commands received through the USB control endpoint
+// progMode	: Next programming operation to be performed
+uint8 USBFS_HandleVendorRqst(void)
+{
+	// Varaible to store ACK to be send to the USB packet
+    uint8 progRes = USB_OK_ACK; // OK by default
+	// Varaible to store the data which indicates whether the received command is a programming command
+	uint8 progCmd;
+    
+	// If executing a previous instruction, initiate a zero length USB transfer
+	if (fTcBusy == SET_BUSY)
+	{
+		USBFS_currentTD.count = 0;
+	} 
+    else 
+    {
+		// Extract the count of bytes received
+		USBFS_currentTD.count = ((uint16)CY_GET_REG8(USBFS_EP0_DR6_PTR)) + ((uint16)CY_GET_REG8(USBFS_EP0_DR7_PTR)<<8);
+
+		// If read operation, set the data pointer to the databuffer address
+        if (CY_GET_REG8(USBFS_EP0_DR1_PTR) == READ_CMD)
+        {
+            USBFS_currentTD.pData = &pifBuf[0];
+        } 
+		// If write operation, extract the command from the USB control endpoint register
+        else if (CY_GET_REG8(USBFS_EP0_DR1_PTR) == WRITE_CMD)
+        {
+            // Acknowledge the command
+			USBFS_currentTD.pData = &progRes;
+			
+			// progCmd checks if the command is a programing command
+            progCmd  = CY_GET_REG8(USBFS_EP0_DR2_PTR);
+			
+			// progMode stores the programming operation type
+            progMode = CY_GET_REG8(USBFS_EP0_DR3_PTR);
+			
+			// Array pifData stores the values such as the acquire mode (Reset/Powercycle), device to be acquired (PSoC 3/4/5LP), 
+			// number of retries before declaring the programming operation to have failed, and the protocol type (SWD). The values
+			// depend on the current value of the variable progMode
+            pifData[0] = CY_GET_REG8(USBFS_EP0_DR4_PTR);
+            pifData[1] = CY_GET_REG8(USBFS_EP0_DR5_PTR);
+            
+			// If the command is a programming command
+            if (progCmd == PROGRAM_CMD)
+            {	
+                if (progMode != CMD_BUFFER)
+                {
+                    // Pass the command to pending operation
+					pendingOp = progMode;
+					
+                    // Set the busy flag
+                    fTcBusy = SET_BUSY;				
+                }
+            }
+        } 
+        else 
+        {
+			// Do nothing
+        }
+	
+    }
+	return(USBFS_InitControlRead());
 }

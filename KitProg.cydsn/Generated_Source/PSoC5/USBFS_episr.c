@@ -29,7 +29,7 @@
 * Custom Declarations
 ***************************************/
 /* `#START CUSTOM_DECLARATIONS` Place your declaration here */
-extern volatile uint8 bUSBResetDetected;
+
 /* `#END` */
 
 
@@ -593,7 +593,7 @@ CY_ISR(USBFS_SOF_ISR)
 CY_ISR(USBFS_BUS_RESET_ISR)
 {
     /* `#START BUS_RESET_USER_CODE` Place your code here */
-	bUSBResetDetected = 1;
+
     /* `#END` */
 
     USBFS_ReInitComponent();

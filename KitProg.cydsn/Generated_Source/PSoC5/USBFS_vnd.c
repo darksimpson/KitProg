@@ -25,7 +25,7 @@
 ***************************************/
 
 /* `#START VENDOR_SPECIFIC_DECLARATIONS` Place your declaration here */
-#include "kitprog.h"
+
 /* `#END` */
 
 
@@ -74,9 +74,7 @@ uint8 USBFS_HandleVendorRqst(void)
     }
 
     /* `#START VENDOR_SPECIFIC_CODE` Place your vendor specific request here */
-	// Service the vendor specific command
-	VendorCmd();		
-	requestHandled = USBFS_InitControlRead();
+
     /* `#END` */
 
     return(requestHandled);
