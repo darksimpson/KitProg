@@ -1,4 +1,4 @@
-#if !defined(PROGCOMM_H) 
+#if !defined(PROGCOMM_H)
 #define PROGCOMM_H
 
 #include <stdbool.h>

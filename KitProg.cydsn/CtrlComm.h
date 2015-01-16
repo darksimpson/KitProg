@@ -1,5 +1,5 @@
-#if !defined(CTRLCOMM_H) 
-#define CTRLCOMM_H 
+#if !defined(CTRLCOMM_H)
+#define CTRLCOMM_H
 
 #include <project.h>
 
